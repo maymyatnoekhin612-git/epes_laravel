@@ -22,7 +22,6 @@ return new class extends Migration
             $table->integer('time_spent_seconds')->default(0);
             $table->decimal('score', 5, 2)->nullable();
             $table->json('band_scores')->nullable();
-            $table->text('feedback')->nullable();
             $table->timestamps();
 
             $table->index(['user_id', 'test_id']);

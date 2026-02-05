@@ -1,19 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Verify Your Email</title>
+    <title>Email Verification Code</title>
 </head>
 <body>
-    <h1>Welcome to English Proficiency Test System!</h1>
+    <h1>Email Verification</h1>
     <p>Hello {{ $user->name }},</p>
-    <p>Thank you for registering. Please click the button below to verify your email address:</p>
+    <p>Thank you for registering. Use the verification code below to verify your email address:</p>
     
-    <a href="{{ $verificationUrl }}" 
-       style="background-color: #4CAF50; color: white; padding: 14px 20px; text-align: center; text-decoration: none; display: inline-block; border-radius: 5px;">
-        Verify Email Address
-    </a>
+    <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px;">
+        <h2 style="font-size: 32px; letter-spacing: 10px; color: #2196F3;">
+            {{ $verificationCode }}
+        </h2>
+    </div>
+    
+    <p>Enter this 6-digit code on the verification page to complete your registration.</p>
+    
+    <p><strong>Code expires in {{ $expiryMinutes }} minutes.</strong></p>
     
     <p>If you didn't create an account, you can safely ignore this email.</p>
-    <p>This verification link will expire in 24 hours.</p>
 </body>
 </html>

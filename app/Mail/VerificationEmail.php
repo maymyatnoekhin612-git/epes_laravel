@@ -12,21 +12,23 @@ class VerificationEmail extends Mailable
     use Queueable, SerializesModels;
 
     public $user;
-    public $verificationUrl;
+    public $verificationCode;
+    public $expiryMinutes = 15;
 
-    public function __construct(User $user)
+    public function __construct(User $user, $verificationCode)
     {
         $this->user = $user;
-        $this->verificationUrl = url("/api/auth/verify/{$user->verification_token}");
+        $this->verificationCode = $verificationCode;
     }
 
     public function build()
     {
-        return $this->subject('Verify Your Email - English Proficiency Test System')
+        return $this->subject('Email Verification Code - English Proficiency Test System')
                     ->view('emails.verification')
                     ->with([
                         'user' => $this->user,
-                        'verificationUrl' => $this->verificationUrl
+                        'verificationCode' => $this->verificationCode,
+                        'expiryMinutes' => $this->expiryMinutes
                     ]);
     }
 }

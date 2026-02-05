@@ -10,6 +10,7 @@ class Test extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'title',
         'type',
         'description',
@@ -23,6 +24,11 @@ class Test extends Model
         'is_active' => 'boolean'
     ];
 
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+    
     public function sections()
     {
         return $this->hasMany(TestSection::class)->orderBy('order');

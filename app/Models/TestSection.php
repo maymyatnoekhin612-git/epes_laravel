@@ -10,14 +10,21 @@ class TestSection extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'test_id',
         'title',
         'content',
         'audio_url',
+        'image_url',
         'audio_duration',
         'order',
         'question_count'
     ];
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 
     public function test()
     {

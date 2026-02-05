@@ -27,58 +27,70 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Create user but don't save to database yet
-        $user = new User([
+        $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'verification_token' => Str::random(60),
-            'verification_token_expires_at' => Carbon::now()->addHours(24),
+            'email_verified_at' => null,
+            'role' => 'user',
         ]);
 
-        // Save to get an ID
-        $user->email_verified_at = null;
-        $user->save();
-
-        // Send verification email
-        Mail::to($user->email)->send(new VerificationEmail($user));
-
+        $verificationCode = $user->generateVerificationCode();
+        Mail::to($user->email)->send(new VerificationEmail($user, $verificationCode));
+        
         return response()->json([
-            'message' => 'Registration successful! Please check your email to verify your account.',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'is_verified' => false,
-            ]
+            'message' => 'Registration successful! Please check your email for the verification code.',
+            'email' => $user->email, // Send email back for verification page
+            'user_id' => $user->id,
         ], 201);
     }
 
-    public function verifyEmail(Request $request, $token)
+    public function verifyEmail(Request $request)
     {
-        $user = User::where('verification_token', $token)
-                    ->where('verification_token_expires_at', '>', Carbon::now())
-                    ->first();
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'code' => 'required|string|size:6',
+        ]);
 
-        if (!$user) {
-            return response()->json(['message' => 'Invalid or expired verification token.'], 400);
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not found.'], 404);
+        }
+
+        // Check if already verified
+        if ($user->hasVerifiedEmail()) {
+            return response()->json(['message' => 'Email already verified.'], 400);
+        }
+
+        // Validate OTP code
+        if (!$user->isVerificationCodeValid($request->code)) {
+            $user->incrementVerificationAttempts();
+            
+            $attemptsLeft = 3 - $user->email_verification_attempts;
+            
+            return response()->json([
+                'message' => 'Invalid or expired verification code.',
+                'attempts_left' => $attemptsLeft > 0 ? $attemptsLeft : 0,
+                'blocked' => $user->email_verification_attempts >= 3
+            ], 400);
+        }
+
+         // Mark email as verified
         $user->email_verified_at = Carbon::now();
-        $user->verification_token = null;
-        $user->verification_token_expires_at = null;
+        $user->clearVerificationCode();
         $user->save();
 
-        return response()->json(['message' => 'Email verified successfully! You can now login.',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ]
+        return response()->json([
+            'message' => 'Email verified successfully! You can now login.',
         ], 200);
     }
 
-    public function resendVerification(Request $request)
+    public function resendVerificationCode(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'email' => 'required|email|exists:users,email',
@@ -98,18 +110,20 @@ class AuthController extends Controller
             ], 400);
         }
 
-        // Generate new token if expired
-        if ($user->verification_token_expires_at < Carbon::now()) {
-            $user->verification_token = Str::random(60);
-            $user->verification_token_expires_at = Carbon::now()->addHours(24);
-            $user->save();
+        if ($user->email_verification_attempts >= 3) {
+            return response()->json([
+                'message' => 'Too many verification attempts. Please try later.'
+            ], 429);
         }
 
+        $verificationCode = $user->generateVerificationCode();
+
         // Resend verification email
-        Mail::to($user->email)->send(new VerificationEmail($user));
+        Mail::to($user->email)->send(new VerificationEmail($user, $verificationCode));
 
         return response()->json([
-            'message' => 'Verification email resent successfully.'
+            'message' => 'New verification code sent successfully.',
+            'email' => $user->email,
         ], 200);
     }
 
@@ -169,19 +183,59 @@ class AuthController extends Controller
         }
 
         $user = User::where('email', $request->email)->first();
-        $user->reset_password_token = Str::random(60);
-        $user->reset_password_expires_at = Carbon::now()->addHours(1);
-        $user->save();
+        
+        if (!$user->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Please verify your email first.'
+            ], 400);
+        }
 
-        Mail::to($user->email)->send(new PasswordResetEmail($user));
+        $resetCode = $user->generatePasswordResetCode();
 
-        return response()->json(['message' => 'Password reset link sent to your email.'], 200);
+        // Send password reset email with code
+        Mail::to($user->email)->send(new PasswordResetEmail($user, $resetCode));
+
+        return response()->json([
+            'message' => 'Password reset code sent to your email.',
+            'email' => $user->email,
+        ], 200);
+    }
+
+    public function verifyPasswordResetCode(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|exists:users,email',
+            'code' => 'required|string|size:6',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user->isPasswordResetCodeValid($request->code)) {
+            $user->incrementPasswordResetAttempts();
+            
+            $attemptsLeft = 3 - $user->password_reset_attempts;
+            
+            return response()->json([
+                'message' => 'Invalid or expired reset code.',
+                'attempts_left' => $attemptsLeft > 0 ? $attemptsLeft : 0,
+                'blocked' => $user->password_reset_attempts >= 3
+            ], 400);
+        }
+        return response()->json([
+            'message' => 'Reset code verified successfully.',
+            'verified' => true,
+        ], 200);
     }
 
     public function resetPassword(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'token' => 'required|string',
+            'email' => 'required|email|exists:users,email',
+            'code' => 'required|string|size:6',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
@@ -189,23 +243,24 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $user = User::where('reset_password_token', $request->token)
-                    ->where('reset_password_expires_at', '>', Carbon::now())
-                    ->first();
+        $user = User::where('email', $request->email)->first();
 
-        if (!$user) {
-            return response()->json(['message' => 'Invalid or expired reset token.'], 400);
+        if (!$user->isPasswordResetCodeValid($request->code)) {
+            return response()->json(['message' => 'Invalid or expired reset code.'], 400);
         }
 
+        // Update password
         $user->password = Hash::make($request->password);
-        $user->reset_password_token = null;
-        $user->reset_password_expires_at = null;
+        $user->clearPasswordResetCode();
+        
+        // Invalidate all existing tokens
+        $user->tokens()->delete();
+        
         $user->save();
 
-        // Invalidate all existing tokens (optional but good for security)
-        $user->tokens()->delete();
-
-        return response()->json(['message' => 'Password reset successfully!'], 200);
+         return response()->json([
+            'message' => 'Password reset successfully! You can now login with your new password.',
+        ], 200);
     }
 
     public function user(Request $request)

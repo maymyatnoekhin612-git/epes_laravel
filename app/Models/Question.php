@@ -10,6 +10,7 @@ class Question extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'test_section_id',
         'type',
         'question_text',
@@ -26,6 +27,11 @@ class Question extends Model
         'metadata' => 'array'
     ];
 
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+    
     public function section()
     {
         return $this->belongsTo(TestSection::class, 'test_section_id');

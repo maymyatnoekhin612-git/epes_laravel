@@ -10,9 +10,9 @@ Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
-Route::get('/auth/verify/{token}', [AuthController::class, 'verifyEmail']);
-Route::post('/auth/resend-verification', [AuthController::class, 'resendVerification']);
-
+Route::post('/auth/resend-verification', [AuthController::class, 'resendVerificationCode']);
+Route::post('/auth/verify-email', [AuthController::class, 'verifyEmail']); // Changed from GET to POST
+Route::post('/auth/verify-reset-code', [AuthController::class, 'verifyPasswordResetCode']);
 
 // Tests - available to all
 Route::get('/tests', [TestController::class, 'index']);

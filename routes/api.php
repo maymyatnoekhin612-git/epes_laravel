@@ -18,6 +18,18 @@ Route::post('/auth/verify-reset-code', [AuthController::class, 'verifyPasswordRe
 Route::get('/tests', [TestController::class, 'index']);
 Route::get('/tests/{id}', [TestController::class, 'show']);
 
+// Writing Routes
+Route::get('/writing/tests/{testId}', [TestController::class, 'getWritingTest']); // Public - view questions
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/writing/tests/{testId}/saved', [TestController::class, 'getWritingSavedAnswers']);
+    Route::post('/writing/tests/{testId}/save', [TestController::class, 'saveWritingAnswers']);
+    Route::post('/writing/attempts/{attemptId}/submit', [TestController::class, 'submitWritingTest']);
+    Route::get('/writing/tests/{testId}/history', [TestController::class, 'getWritingHistory']);
+});
+
+// Speaking Route
+Route::get('/speaking/tests/{testId}', [TestController::class, 'getSpeakingTest']); // Public - view questions only
+
 // Test taking (requires auth or guest session)
 Route::post('/tests/{testId}/start', [TestController::class, 'startTest']);
 Route::get('/attempts/{attemptId}/questions', [TestController::class, 'getTestQuestions']);

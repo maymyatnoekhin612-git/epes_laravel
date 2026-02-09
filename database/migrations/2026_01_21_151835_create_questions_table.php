@@ -25,7 +25,8 @@ return new class extends Migration
                 'diagram_label',
                 'short_answer',
                 'form_completion',
-                'map_plan_labeling'
+                'map_plan_labeling',
+                'writing'
             ]);
             $table->text('question_text');
             $table->json('options')->nullable();

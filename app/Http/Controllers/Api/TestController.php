@@ -28,6 +28,28 @@ class TestController extends Controller
         return response()->json($test);
     }
 
+    public function getSpeakingTest($testId)
+    {
+        $test = Test::with(['sections' => function($query) {
+            $query->orderBy('order');
+        }])->where('id', $testId)
+        ->where('type', 'speaking')
+        ->firstOrFail();
+
+        return response()->json($test);
+    }
+
+    public function getWritingTest($testId)
+    {
+        $test = Test::with(['sections.questions' => function($query) {
+            $query->orderBy('order');
+        }])->where('id', $testId)
+        ->where('type', 'writing')
+        ->firstOrFail();
+
+        return response()->json($test);
+    }
+
     public function startTest(Request $request, $testId)
     {
         $test = Test::findOrFail($testId);
@@ -52,6 +74,133 @@ class TestController extends Controller
             'test' => $test,
             'started_at' => $attempt->started_at,
         ]);
+    }
+
+    public function getWritingSavedAnswers(Request $request, $testId)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        // Find the latest writing attempt for this user and test
+        $attempt = TestAttempt::where('user_id', $user->id)
+            ->where('test_id', $testId)
+            ->whereHas('test', function($query) {
+                $query->where('type', 'writing');
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$attempt) {
+            return response()->json([]);
+        }
+
+        $answers = UserAnswer::where('test_attempt_id', $attempt->id)
+            ->get()
+            ->pluck('user_answer', 'question_id');
+
+        return response()->json($answers);
+    }
+
+    public function saveWritingAnswers(Request $request, $testId)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $request->validate([
+            'answers' => 'required|array',
+            'answers.*' => 'nullable|string'
+        ]);
+        $test = Test::where('id', $testId)
+            ->where('type', 'writing')
+            ->firstOrFail();
+
+        // Find existing in-progress attempt or create new one
+        $attempt = TestAttempt::firstOrCreate(
+            [
+                'user_id' => $user->id,
+                'test_id' => $testId,
+                'status' => 'in_progress'
+            ],
+            [
+                'started_at' => Carbon::now(),
+                'guest_session_id' => null
+            ]
+        );
+        foreach ($request->answers as $questionId => $answer) {
+            UserAnswer::updateOrCreate(
+                [
+                    'test_attempt_id' => $attempt->id,
+                    'question_id' => $questionId
+                ],
+                [
+                    'user_answer' => $answer,
+                    'is_correct' => false, // No scoring for writing
+                    'points_earned' => 0,
+                    'time_spent_seconds' => 0
+                ]
+            );
+        }
+        $attempt->updated_at = Carbon::now();
+        $attempt->save();
+
+        return response()->json([
+            'message' => 'Answers saved successfully',
+            'attempt_id' => $attempt->id,
+            'saved_at' => now()->toDateTimeString()
+        ]);
+    }
+
+    public function submitWritingTest(Request $request, $attemptId)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $attempt = TestAttempt::where('id', $attemptId)
+            ->where('user_id', $user->id)
+            ->whereHas('test', function($query) {
+                $query->where('type', 'writing');
+            })
+            ->firstOrFail();
+
+        $attempt->status = 'completed';
+        $attempt->completed_at = Carbon::now();
+        $attempt->time_spent_seconds = Carbon::parse($attempt->started_at)->diffInSeconds(Carbon::now());
+        $attempt->score = 0; // No scoring for writing
+        $attempt->band_scores = [
+            'overall' => 0,
+            'message' => 'Writing answers saved for review'
+        ];
+        $attempt->save();
+        return response()->json([
+            'message' => 'Writing test submitted successfully',
+            'attempt_id' => $attempt->id
+        ]);
+
+    }
+
+    public function getWritingHistory(Request $request, $testId)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $attempts = TestAttempt::with(['userAnswers.question'])
+            ->where('user_id', $user->id)
+            ->where('test_id', $testId)
+            ->whereHas('test', function($query) {
+                $query->where('type', 'writing');
+            })
+            ->orderBy('completed_at', 'desc')
+            ->get();
+
+        return response()->json($attempts);
     }
 
     public function getTestQuestions($attemptId)

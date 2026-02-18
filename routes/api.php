@@ -20,22 +20,16 @@ Route::get('/tests/{id}', [TestController::class, 'show']);
 
 // Writing Routes
 Route::get('/writing/tests/{testId}', [TestController::class, 'getWritingTest']); // Public - view questions
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/writing/tests/{testId}/saved', [TestController::class, 'getWritingSavedAnswers']);
-    Route::post('/writing/tests/{testId}/save', [TestController::class, 'saveWritingAnswers']);
-    Route::post('/writing/attempts/{attemptId}/submit', [TestController::class, 'submitWritingTest']);
-    Route::get('/writing/tests/{testId}/history', [TestController::class, 'getWritingHistory']);
-});
 
 // Speaking Route
 Route::get('/speaking/tests/{testId}', [TestController::class, 'getSpeakingTest']); // Public - view questions only
 
-// Test taking (requires auth or guest session)
-Route::post('/tests/{testId}/start', [TestController::class, 'startTest']);
 Route::get('/attempts/{attemptId}/questions', [TestController::class, 'getTestQuestions']);
 Route::post('/attempts/{attemptId}/answer', [TestController::class, 'submitAnswer']);
 Route::post('/attempts/{attemptId}/submit', [TestController::class, 'submitTest']);
-Route::get('/attempts/{attemptId}/results', [TestController::class, 'getResults']);
+
+// Guest test starting (no auth required)
+Route::post('/tests/{testId}/start-guest', [TestController::class, 'startTestAsGuest']);
 Route::get('/guest-results/{guestSessionId}', [TestController::class, 'getGuestResults']);
 
 // Authenticated routes
@@ -44,5 +38,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     
     Route::get('/user/attempts', [TestController::class, 'getUserAttempts']);
+    
+    Route::post('/tests/{testId}/start', [TestController::class, 'startTest']);
+    Route::get('/attempts/{attemptId}/results', [TestController::class, 'getResults']);
     
 });

@@ -131,6 +131,7 @@ class TestController extends Controller
 
     public function submitAnswer(Request $request, $attemptId)
     {
+
         $request->validate([
             'question_id' => 'required|exists:questions,id',
             'answer' => 'required',
@@ -159,6 +160,7 @@ class TestController extends Controller
             ]);
             return response()->json(['message' => 'Answer updated']);
         }
+
 
         // Create new answer
         // For writing questions, set default values
@@ -226,13 +228,12 @@ class TestController extends Controller
             }
 
             // Calculate IELTS band score for reading/listening
-            $score = $this->calculateIELTSScore($totalPointsEarned, $totalPointsPossible, $attempt->test->type);
+            $score = $this->calculateIELTSScore($totalPointsEarned, $attempt->test->type);
 
             $bandScores = [
                 'overall' => $score,
                 'correct_answers' => $totalPointsEarned,
                 'total_questions' => $totalPointsPossible,
-                'percentage' => round(($totalPointsEarned / $totalPointsPossible) * 100, 2),
                 'test_type' => $attempt->test->type
             ];
         }
@@ -254,25 +255,57 @@ class TestController extends Controller
     }
     private function checkAnswer($userAnswer, $correctAnswers, $questionType)
     {
-        if (is_string($userAnswer) && strpos($userAnswer, ',') !== false) {
-            $userAnswer = array_map('trim', explode(',', $userAnswer));
-        }
 
-        if (is_array($userAnswer) && is_array($correctAnswers)) {
+        // Handle gap-based question types
+        $gapBasedTypes = ['summary_completion', 'form_completion', 'diagram_label', 
+                        'map_plan_labeling', 'matching_headings', 'matching_features'];
+        
+        if (in_array($questionType, $gapBasedTypes)) {
+            // Decode JSON string to array
+            $userAnswerArray = [];
+            if (is_string($userAnswer)) {
+                $userAnswerArray = json_decode($userAnswer, true);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $userAnswerArray = [];
+                }
+            } elseif (is_array($userAnswer)) {
+                $userAnswerArray = $userAnswer;
+            }
+        
+            // Ensure userAnswerArray is an array
+            if (!is_array($userAnswerArray)) {
+                $userAnswerArray = [];
+            }
+            
+            // Ensure correctAnswers is an array
+            $correctArray = is_array($correctAnswers) ? $correctAnswers : [];
+            
             $pointsEarned = 0;
-            foreach ($correctAnswers as $index => $correctAnswer) {
-                if (isset($userAnswer[$index]) && 
-                    strtolower(trim($userAnswer[$index])) === strtolower(trim($correctAnswer))) {
-                    $pointsEarned++; // 1 point for each correct blank
+            $totalGaps = count($correctArray);
+        
+            for ($i = 0; $i < $totalGaps; $i++) {
+                $userAns = isset($userAnswerArray[$i]) ? trim($userAnswerArray[$i]) : '';
+                $correctAns = isset($correctArray[$i]) ? trim($correctArray[$i]) : '';
+                
+                $isCorrect = !empty($userAns) && strtolower($userAns) === strtolower($correctAns);
+                
+                if ($isCorrect) {
+                    $pointsEarned++;
                 }
             }
             return $pointsEarned;
         }
-
-        return (strtolower(trim($userAnswer)) === strtolower(trim($correctAnswers[0] ?? $correctAnswers))) ? 1 : 0;
+        
+        // Handle single answer (multiple choice, true/false, etc.)
+        // For non-gap questions, answers are simple strings
+        $singleUserAnswer = is_array($userAnswer) ? ($userAnswer[0] ?? '') : $userAnswer;
+        $singleCorrectAnswer = is_array($correctAnswers) ? ($correctAnswers[0] ?? '') : $correctAnswers;
+        
+        $result = (strtolower(trim($singleUserAnswer)) === strtolower(trim($singleCorrectAnswer))) ? 1 : 0;
+        
+        return $result;
     }
-
-    private function calculateIELTSScore($correctAnswers, $totalQuestions, $testType)
+    private function calculateIELTSScore($correctAnswers, $testType)
     {
         // For summary completion with multiple blanks, $correctAnswers is the total points earned
         // $totalQuestions is the total points possible
@@ -348,13 +381,17 @@ class TestController extends Controller
         return response()->json($attempts);
     }
 
-    public function getGuestResults($guestSessionId)
+    public function getGuestResults($attemptId)
     {
-        $attempts = TestAttempt::with('test')
-            ->where('guest_session_id', $guestSessionId)
-            ->where('status', 'completed')
-            ->get();
+        $attempt = TestAttempt::with(['test', 'userAnswers.question'])->findOrFail($attemptId);
 
-        return response()->json($attempts);
+        if ($attempt->status !== 'completed') {
+            return response()->json(['message' => 'Test not completed'], 400);
+        }
+
+        return response()->json([
+            'attempt' => $attempt,
+            'results' => $attempt->band_scores
+        ]);
     }
 }

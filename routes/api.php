@@ -30,7 +30,7 @@ Route::post('/attempts/{attemptId}/submit', [TestController::class, 'submitTest'
 
 // Guest test starting (no auth required)
 Route::post('/tests/{testId}/start-guest', [TestController::class, 'startTestAsGuest']);
-Route::get('/guest-results/{guestSessionId}', [TestController::class, 'getGuestResults']);
+Route::get('/guest-results/{attemptId}', [TestController::class, 'getGuestResults']);
 
 // Authenticated routes
 Route::middleware('auth:sanctum')->group(function () {

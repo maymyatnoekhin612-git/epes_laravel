@@ -19,7 +19,7 @@ class AuthController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => 'required|string|email|max:255',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
@@ -27,6 +27,32 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        $existingUser = User::where('email', $request->email)->first();
+        
+        if ($existingUser) {
+            if ($existingUser->hasVerifiedEmail()) {
+                return response()->json([
+                    'errors' => ['email' => ['This email is already registered.']]
+                ], 422);
+            }
+            // Check if the unverified account is expired (older than 24 hours)
+            if ($existingUser->created_at->lt(Carbon::now()->subHours(24))) {
+                // Delete expired unverified account
+                $existingUser->delete();
+            } else {
+                // Account is still within 24 hours, resend verification code
+                $verificationCode = $existingUser->generateVerificationCode();
+                Mail::to($existingUser->email)->send(new VerificationEmail($existingUser, $verificationCode));
+                
+                return response()->json([
+                    'message' => 'An unverified account already exists. A new verification code has been sent to your email.',
+                    'email' => $existingUser->email,
+                    'user_id' => $existingUser->id,
+                ], 200);
+            }
+        }
+
+        // Create new user
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -40,7 +66,7 @@ class AuthController extends Controller
         
         return response()->json([
             'message' => 'Registration successful! Please check your email for the verification code.',
-            'email' => $user->email, // Send email back for verification page
+            'email' => $user->email,
             'user_id' => $user->id,
         ], 201);
     }

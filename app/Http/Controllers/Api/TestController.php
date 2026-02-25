@@ -54,11 +54,12 @@ class TestController extends Controller
     {
         $user = $request->user();
         $test = Test::findOrFail($testId);
-        
+
         // Check for existing in-progress attempt
         $existingAttempt = TestAttempt::where('user_id', $user->id)
             ->where('test_id', $testId)
             ->where('status', 'in_progress')
+            ->where('started_at', '>=', Carbon::now()->subHours(1))
             ->first();
             
         if ($existingAttempt) {
@@ -70,6 +71,14 @@ class TestController extends Controller
                 'started_at' => $existingAttempt->started_at,
             ]);
         }
+
+        // If there's an old in-progress attempt (older than 1 hours), mark it as abandoned
+        TestAttempt::where('user_id', $user->id)
+            ->where('test_id', $testId)
+            ->where('status', 'in_progress')
+            ->where('started_at', '<', Carbon::now()->subHours(1))
+            ->update(['status' => 'abandoned']);
+
 
         $attempt = TestAttempt::create([
             'user_id' => $user->id,
@@ -93,6 +102,31 @@ class TestController extends Controller
         // This route is for guest users (no auth required)
         $test = Test::findOrFail($testId);
         
+        $guestSessionId = $request->input('guest_session_id', Str::uuid());
+        
+        // Check for existing in-progress attempt for this guest
+        $existingAttempt = TestAttempt::where('guest_session_id', $guestSessionId)
+            ->where('test_id', $testId)
+            ->where('status', 'in_progress')
+            ->where('started_at', '>=', Carbon::now()->subHours(1))
+            ->first();
+            
+        if ($existingAttempt) {
+            return response()->json([
+                'message' => 'Continuing existing test attempt',
+                'attempt_id' => $existingAttempt->id,
+                'guest_session_id' => $existingAttempt->guest_session_id,
+                'test' => $test,
+                'started_at' => $existingAttempt->started_at,
+            ]);
+        }
+
+        TestAttempt::where('guest_session_id', $guestSessionId)
+            ->where('test_id', $testId)
+            ->where('status', 'in_progress')
+            ->where('started_at', '<', Carbon::now()->subHours(1))
+            ->update(['status' => 'abandoned']);
+
         // Create new attempt for guest user
         $attempt = TestAttempt::create([
             'user_id' => null, // Explicitly null for guest users
@@ -233,7 +267,7 @@ class TestController extends Controller
             $bandScores = [
                 'overall' => $score,
                 'correct_answers' => $totalPointsEarned,
-                'total_questions' => $totalPointsPossible,
+                'total_questions' => 40,
                 'test_type' => $attempt->test->type
             ];
         }
@@ -255,7 +289,6 @@ class TestController extends Controller
     }
     private function checkAnswer($userAnswer, $correctAnswers, $questionType)
     {
-
         // Handle gap-based question types
         $gapBasedTypes = ['summary_completion', 'form_completion', 'diagram_label', 
                         'map_plan_labeling', 'matching_headings', 'matching_features'];
@@ -285,9 +318,29 @@ class TestController extends Controller
         
             for ($i = 0; $i < $totalGaps; $i++) {
                 $userAns = isset($userAnswerArray[$i]) ? trim($userAnswerArray[$i]) : '';
-                $correctAns = isset($correctArray[$i]) ? trim($correctArray[$i]) : '';
                 
-                $isCorrect = !empty($userAns) && strtolower($userAns) === strtolower($correctAns);
+                // Skip if user answer is empty
+                if (empty($userAns)) {
+                    continue;
+                }
+                
+                $correctAns = isset($correctArray[$i]) ? $correctArray[$i] : '';
+                
+                $isCorrect = false;
+                
+                // Check if correct answer is an array of multiple acceptable answers
+                if (is_array($correctAns)) {
+                    // Multiple possible correct answers for this gap
+                    foreach ($correctAns as $possibleCorrect) {
+                        if (strtolower($userAns) === strtolower(trim($possibleCorrect))) {
+                            $isCorrect = true;
+                            break;
+                        }
+                    }
+                } else {
+                    // Single correct answer for this gap
+                    $isCorrect = strtolower($userAns) === strtolower(trim($correctAns));
+                }
                 
                 if ($isCorrect) {
                     $pointsEarned++;
@@ -297,13 +350,31 @@ class TestController extends Controller
         }
         
         // Handle single answer (multiple choice, true/false, etc.)
-        // For non-gap questions, answers are simple strings
+        // Check if correct answers is an array of multiple acceptable answers
         $singleUserAnswer = is_array($userAnswer) ? ($userAnswer[0] ?? '') : $userAnswer;
-        $singleCorrectAnswer = is_array($correctAnswers) ? ($correctAnswers[0] ?? '') : $correctAnswers;
+        $singleUserAnswer = trim($singleUserAnswer);
         
-        $result = (strtolower(trim($singleUserAnswer)) === strtolower(trim($singleCorrectAnswer))) ? 1 : 0;
+        if (empty($singleUserAnswer)) {
+            return 0;
+        }
         
-        return $result;
+        // Handle case where correctAnswers might be an array of acceptable answers
+        if (is_array($correctAnswers)) {
+            // If it's an array of multiple acceptable answers (like ["colour", "color"])
+            foreach ($correctAnswers as $possibleCorrect) {
+                if (is_string($possibleCorrect) && strtolower($singleUserAnswer) === strtolower(trim($possibleCorrect))) {
+                    return 1;
+                }
+            }
+            // If it's an array with a single answer (like ["A"])
+            if (isset($correctAnswers[0]) && is_string($correctAnswers[0])) {
+                return (strtolower($singleUserAnswer) === strtolower(trim($correctAnswers[0]))) ? 1 : 0;
+            }
+            return 0;
+        }
+        
+        // Simple string comparison
+        return (strtolower($singleUserAnswer) === strtolower(trim($correctAnswers))) ? 1 : 0;
     }
     private function calculateIELTSScore($correctAnswers, $testType)
     {
@@ -393,5 +464,82 @@ class TestController extends Controller
             'attempt' => $attempt,
             'results' => $attempt->band_scores
         ]);
+    }
+
+    public function getUserAnswers($attemptId)
+    {
+        try {
+            $attempt = TestAttempt::find($attemptId);
+            
+            if (!$attempt) {
+                return response()->json(['error' => 'Attempt not found'], 404);
+            }
+
+            // Get answers with question and test section details
+            $answers = UserAnswer::where('test_attempt_id', $attemptId)
+                ->with(['question' => function($query) {
+                    $query->select('id', 'test_section_id', 'question_text', 'type', 'order', 'points', 'correct_answers');
+                }])
+                ->orderBy('id')
+                ->get();
+
+            $formattedAnswers = [];
+            foreach ($answers as $answer) {
+                // Get test section separately
+                $testSection = null;
+                if ($answer->question && $answer->question->test_section_id) {
+                    $testSection = \App\Models\TestSection::select('id', 'title', 'image_url', 'order', 'content')
+                        ->where('id', $answer->question->test_section_id)
+                        ->first();
+                }
+
+                // Format the answer based on question type
+                $userAnswer = $answer->user_answer;
+                $correctAnswer = $answer->question->correct_answers ?? null;
+                
+                // For gap-based questions, decode the JSON
+                if (in_array($answer->question->type, [
+                    'summary_completion', 'form_completion', 'diagram_label', 
+                    'map_plan_labeling', 'matching_headings', 'matching_features'
+                ])) {
+                    if (is_string($userAnswer)) {
+                        $userAnswer = json_decode($userAnswer, true);
+                    }
+                    if (is_string($correctAnswer)) {
+                        $correctAnswer = json_decode($correctAnswer, true);
+                    }
+                }
+
+                $formattedAnswers[] = [
+                    'id' => $answer->id,
+                    'user_answer' => $userAnswer,
+                    'is_correct' => $answer->is_correct,
+                    'points_earned' => $answer->points_earned,
+                    'time_spent_seconds' => $answer->time_spent_seconds,
+                    'created_at' => $answer->created_at,
+                    'question' => $answer->question ? [
+                        'id' => $answer->question->id,
+                        'question_text' => $answer->question->question_text,
+                        'type' => $answer->question->type,
+                        'order' => $answer->question->order,
+                        'points' => $answer->question->points,
+                        'correct_answers' => $correctAnswer,
+                        'test_section' => $testSection ? [
+                            'id' => $testSection->id,
+                            'title' => $testSection->title,
+                            'image_url' => $testSection->image_url,
+                            'content' => $testSection->content,
+                            'order' => $testSection->order
+                        ] : null
+                    ] : null
+                ];
+            }
+
+            return response()->json($formattedAnswers);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error in getUserAnswers: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to fetch answers'], 500);
+        }
     }
 }

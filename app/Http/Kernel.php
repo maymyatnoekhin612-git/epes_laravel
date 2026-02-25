@@ -6,6 +6,11 @@ use Illuminate\Foundation\Http\Kernel as HttpKernel;
 
 class Kernel extends HttpKernel
 {
+    protected function schedule(Schedule $schedule)
+    {
+        $schedule->command('clean:unverified-users')->daily();
+    }
+    
     protected $middleware = [
         \Illuminate\Http\Middleware\HandleCors::class,
         \App\Http\Middleware\TrustProxies::class,

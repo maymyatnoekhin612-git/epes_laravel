@@ -36,106 +36,83 @@ class DatabaseSeeder extends Seeder
             'email_verified_at' => now(),
         ]);
         */
-        
-        $readingTest = Test::create([
-            'title' => 'IELTS Academic Reading Practice Test',
-            'type' => 'reading',
-            'description' => 'Full IELTS Academic Reading test with 3 sections and 40 questions',
-            'duration_minutes' => 60,
-            'total_questions' => 40,
-            'passing_score' => 6.0,
-            'is_active' => true,
-        ]);
-
-        $section1 = TestSection::create([
-            'test_id' => $readingTest->id,
-            'title' => 'Reading Passage 1',
-            'content' => 'The giant panda (Ailuropoda melanoleuca) is a bear native to south central China. It is easily recognized by the large, distinctive black patches around its eyes, over the ears, and across its round body. Though it belongs to the order Carnivora, the giant panda\'s diet is over 99% bamboo. Giant pandas in the wild will occasionally eat other grasses, wild tubers, or even meat in the form of birds, rodents, or carrion. In captivity, they may receive honey, eggs, fish, yams, shrub leaves, oranges, or bananas along with specially prepared food.
-
-The giant panda lives in a few mountain ranges in central China, mainly in Sichuan, but also in neighbouring Shaanxi and Gansu. As a result of farming, deforestation, and other development, the giant panda has been driven out of the lowland areas where it once lived.
-
-The giant panda is a conservation reliant vulnerable species. A 2007 report showed 239 pandas living in captivity inside China and another 27 outside the country. Wild population estimates vary; one estimate shows that there are about 1,590 individuals living in the wild, while a 2006 study via DNA analysis estimated that this figure could be as high as 2,000 to 3,000. Some reports also show that the number of giant pandas in the wild is on the rise.
-
-The giant panda has been a symbol of the World Wide Fund for Nature (WWF) since its formation in 1961.',
-            'order' => 1,
-            'question_count' => 13,
-        ]);
-
-        $questions1 = [
-            [
-                'type' => 'multiple_choice',
-                'question_text' => 'What is the main diet of the giant panda?',
-                'options' => ['Meat', 'Bamboo', 'Fish', 'Fruits'],
-                'correct_answers' => ['Bamboo'],
-                'points' => 1,
-                'order' => 1,
-            ],
-            [
-                'type' => 'true_false_notgiven',
-                'question_text' => 'Giant pandas are native to Japan.',
-                'correct_answers' => ['false'],
-                'points' => 1,
-                'order' => 2,
-            ],
-            [
-                'type' => 'sentence_completion',
-                'question_text' => 'The giant panda has been the symbol of ______ since 1961.',
-                'correct_answers' => ['WWF', 'World Wide Fund for Nature'],
-                'points' => 1,
-                'order' => 3,
-            ],
-        ];
-
-        foreach ($questions1 as $q) {
-            Question::create(array_merge($q, ['test_section_id' => $section1->id]));
-        }
-
-        $listeningTest = Test::create([
-            'title' => 'IELTS Academic Listening Practice Test',
-            'type' => 'listening',
-            'description' => 'Full IELTS Academic Listening test with 4 sections and 40 questions',
-            'duration_minutes' => 30,
-            'total_questions' => 40,
-            'passing_score' => 6.0,
-            'is_active' => true,
-        ]);
-
-        $listeningSection1 = TestSection::create([
-            'test_id' => $listeningTest->id,
-            'title' => 'Section 1: Conversation about accommodation',
-            'audio_url' => '/audio/listening-section1.mp3',
-            'audio_duration' => 180,
-            'order' => 1,
-            'question_count' => 10,
-        ]);
-
         $listeningQuestions = [
+            // [
+            //     'type' => 'diagram_label',
+            //     'question_text' => 'Complete the flow chart below. Write ONE WORD ONLY for each answer.',
+            //     'metadata' => [
+            //         'imageUrl' => ['/storage/image/listening/ielts16_L2_P3.png'],
+                    
+            //         'diagramGaps' => [
+            //             ['text' => '25 ','isGap' => false],
+            //             ['text'=> '','isGap'=> true],
+            //             ['text' => '\n26','isGap'=> false],
+            //             ['text'=> '','isGap'=> true],
+            //             ['text' => '\n27','isGap' => false],
+            //             ['text'=> '','isGap'=> true],
+            //             ['text' => '\n28','isGap'=> false],
+            //             ['text'=> '','isGap'=> true],
+            //             ['text' => '\n29','isGap'=> false],
+            //             ['text'=> '','isGap'=> true],
+            //             ['text' => '\n30','isGap'=> false],
+            //             ['text'=> '','isGap'=> true],
+            //         ]
+            //     ],
+            //     'correct_answers' => ['history', 'paper', ['humans', 'people'], 'stress', 'graph', 'evaluate'],
+            //     'points' => 6,
+            //     'order' => 5,
+            // ],
+            
             [
                 'type' => 'form_completion',
-                'question_text' => 'Complete the form below. Write NO MORE THAN THREE WORDS AND/OR A NUMBER for each answer.',
+                'question_text' => 'Complete the notes below. Write ONE WORD ONLY for each answer.',
+                'correct_answers' => ['creativity','therapy','fitness','balance','brain','motivation','isolation','calories','obesity','habit'],
+                'points' => 10,
+                'order' => 1,
                 'metadata' => [
-                    'form_fields' => [
-                        ['label' => 'Type of accommodation:', 'answer_key' => 'apartment'],
-                        ['label' => 'Monthly rent:', 'answer_key' => '£650'],
-                        ['label' => 'Address:', 'answer_key' => '24 Park Road'],
+                    'summaryGaps' => [
+                        ['text' => '\t \t Health benefits of dance','isGap' => false],
+                        ['text' => 'Recent findings: ','isGap' => false],
+                        ['text' => '\n • All forms of dance produce various hormones associated with feelings of happiness.
+                        \n • Dancing with others has a more positive impact than dancing alone.
+                        \n • An experiment on university students suggested that dance increases ','isGap' => false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => '\n • For those with mental illness, dance could be used as a form of ','isGap'=> false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => '\n Benefits of dance for older people:
+                        \n • accessible for people with low levels of','isGap' => false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => '\n • reduces the risk of heart disease \n • better','isGap'=> false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => 'reduces the risk of accidents \n • improves','isGap'=> false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => ' function by making it work faster \n • improves participant\'s general well-being
+                        \n • gives people more ','isGap'=> false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => ' to take exercise
+                        \n • can lessen the feeling of ','isGap'=> false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => ' , very common in older people \n Benefits of Zumba:
+                        \n • A study at The University of Wisconsin showed that doing Zumba for
+                        40 minutes uses up as many ','isGap'=> false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => ' as other quite intense forms of exercise. \n
+                        • The American Journal of Health Behavior study showed that:\n
+                        - women suffering from ','isGap'=> false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => ' benefited from doing Zumba.
+
+Ma M M Z, [2/25/2026 10:25 AM]
+\n- Zumba became a ','isGap'=> false],
+                        ['text'=> '','isGap'=> true],
+                        ['text' => ' for the participants.','isGap'=> false],
                     ]
                 ],
-                'correct_answers' => ['apartment', '£650', '24 Park Road'],
-                'points' => 1,
-                'order' => 1,
             ],
-            [
-                'type' => 'multiple_choice',
-                'question_text' => 'What does the man want to know about the accommodation?',
-                'options' => ['The parking facilities', 'The nearest bus stop', 'The garden size', 'The electricity bills'],
-                'correct_answers' => ['The nearest bus stop'],
-                'points' => 1,
-                'order' => 2,
-            ],
-        ];
+         ];
 
         foreach ($listeningQuestions as $q) {
-            Question::create(array_merge($q, ['test_section_id' => $listeningSection1->id]));
+            Question::create(array_merge($q, ['test_section_id' => 10]));
         }
     }
 }
